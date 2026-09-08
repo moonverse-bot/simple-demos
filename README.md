@@ -1,6 +1,6 @@
 # AI 智能问答系统（Streamlit + DeepSeek + RAG）
 
-一个基于 **Streamlit** 与 **DeepSeek API** 的 AI 应用项目，支持多模型切换、流式输出、数学公式渲染、多轮上下文记忆，并内置 **RAG 知识库问答**。
+一个基于 **Streamlit** 与 **DeepSeek API** 的 AI 应用项目，支持多模型切换、流式输出、数学公式渲染、多轮上下文记忆，并内置 **RAG 知识库问答** 与 **答案溯源**。
 
 ## 功能亮点
 
@@ -9,8 +9,21 @@
 - 🧠 多模型切换：DeepSeek Chat / DeepSeek Reasoner
 - 📐 数学公式渲染：LaTeX 自动显示为漂亮分数
 - 📚 RAG 知识库：上传文档，AI 依据文档内容回答
+- 🧷 答案溯源：引用资料时标注「（依据资料1）」来源，降低幻觉
 - 🎛 参数可调：Temperature、Max Tokens、记忆轮数
 - 🔧 工程化：API Key 走环境变量、模块化设计
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    U[用户] -->|提问| F[Streamlit 前端 app.py]
+    F -->|上传文档/检索| R[RAG 知识库 rag.py\n切分 + BM25 检索]
+    R -->|相关片段 context| P[提示词构建 api_config.py]
+    P -->|messages| M[DeepSeek API]
+    M -->|流式回复| F
+    F -->|标注依据资料| U
+```
 
 ## 环境要求
 
@@ -45,7 +58,7 @@ streamlit run app.py
 
 1. 左侧「📚 知识库」区域上传 **txt / md / pdf** 文档
 2. 提问时，系统会自动检索与问题最相关的片段并注入提示词
-3. AI 会优先依据你上传的文档内容回答
+3. AI 会优先依据你上传的文档内容回答，并在引用时标注来源
 
 > 说明：当前检索器为 BM25（稀疏向量），纯 Python 实现、轻量易部署；代码已抽象为 `rag.SimpleRAG`，可平滑替换为 ChromaDB + Embedding 的稠密向量检索。
 
@@ -54,11 +67,11 @@ streamlit run app.py
 1. 把代码提交并推送到 GitHub：
    ```bash
    git add -A
-   git commit -m "feat: 多模型、流式输出与 RAG 知识库"
+   git commit -m "feat: 答案溯源与架构文档"
    git push origin main
    ```
 2. 登录 [share.streamlit.io](https://share.streamlit.io)，点击 **New app**
-3. 选择你的仓库 `moonverse-bot/simple-demos`、分支 `main`，入口文件填 `app.py`
+3. 选择仓库 `moonverse-bot/simple-demos`、分支 `main`，入口文件填 `app.py`
 4. 在 **Advanced settings → Secrets** 里添加：
    ```
    DEEPSEEK_API_KEY = sk-你的密钥
