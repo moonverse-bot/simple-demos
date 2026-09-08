@@ -1,6 +1,6 @@
 # AI 智能问答系统（Streamlit + DeepSeek + RAG）
 
-一个基于 **Streamlit** 与 **DeepSeek API** 的 AI 应用项目，支持多模型切换、流式输出、数学公式渲染、多轮上下文记忆，并内置 **RAG 知识库问答** 与 **答案溯源**。
+一个基于 **Streamlit** 与 **DeepSeek API** 的 AI 应用项目，支持多模型切换、流式输出、数学公式渲染、多轮上下文记忆，并内置 **RAG 知识库问答**、**答案溯源** 与 **可切换的检索方式（BM25 / 向量）**。
 
 ## 功能亮点
 
@@ -9,6 +9,7 @@
 - 🧠 多模型切换：DeepSeek Chat / DeepSeek Reasoner
 - 📐 数学公式渲染：LaTeX 自动显示为漂亮分数
 - 📚 RAG 知识库：上传文档，AI 依据文档内容回答
+- 🔎 检索方式可切换：BM25 关键词检索 / ChromaDB 向量语义检索
 - 🧷 答案溯源：引用资料时标注「（依据资料1）」来源，降低幻觉
 - 🎛 参数可调：Temperature、Max Tokens、记忆轮数
 - 🔧 工程化：API Key 走环境变量、模块化设计
@@ -18,7 +19,7 @@
 ```mermaid
 flowchart LR
     U[用户] -->|提问| F[Streamlit 前端 app.py]
-    F -->|上传文档/检索| R[RAG 知识库 rag.py\n切分 + BM25 检索]
+    F -->|上传文档/检索| R[RAG 知识库 rag.py\nBM25 / ChromaDB 向量]
     R -->|相关片段 context| P[提示词构建 api_config.py]
     P -->|messages| M[DeepSeek API]
     M -->|流式回复| F
@@ -36,6 +37,14 @@ flowchart LR
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+默认即可运行（BM25 检索，零额外依赖）。
+
+**可选：启用 ChromaDB 向量检索（语义更准）**
+```bash
+pip install chromadb
+```
+安装后，在页面左侧「检索方式」选择「向量（ChromaDB）」即可；未安装时自动回退到 BM25，不影响使用。
 
 ## 配置 API Key
 
@@ -57,17 +66,15 @@ streamlit run app.py
 ## 使用 RAG 知识库
 
 1. 左侧「📚 知识库」区域上传 **txt / md / pdf** 文档
-2. 提问时，系统会自动检索与问题最相关的片段并注入提示词
-3. AI 会优先依据你上传的文档内容回答，并在引用时标注来源
-
-> 说明：当前检索器为 BM25（稀疏向量），纯 Python 实现、轻量易部署；代码已抽象为 `rag.SimpleRAG`，可平滑替换为 ChromaDB + Embedding 的稠密向量检索。
+2. 提问时，系统自动检索相关片段并注入提示词
+3. AI 会优先依据文档内容回答，引用时标注「（依据资料1）」来源
 
 ## 部署到 Streamlit Cloud（免费）
 
 1. 把代码提交并推送到 GitHub：
    ```bash
    git add -A
-   git commit -m "feat: 答案溯源与架构文档"
+   git commit -m "feat: 向量检索与检索方式切换"
    git push origin main
    ```
 2. 登录 [share.streamlit.io](https://share.streamlit.io)，点击 **New app**
@@ -84,12 +91,13 @@ streamlit run app.py
 simple-demos/
 ├── app.py            # Streamlit 界面与交互（入口）
 ├── api_config.py     # 模型调用、消息构建、公式渲染
-├── rag.py            # 文档切分 + BM25 检索（RAG）
+├── rag.py            # 文档切分 + 检索（BM25 / ChromaDB 向量）
 ├── requirements.txt  # 依赖清单
 └── README.md
 ```
 
 ## 说明
 
+- 默认检索为 BM25（稀疏向量），轻量零依赖；安装 `chromadb` 后可切换为 Embedding 语义检索（更准确，但依赖更重）。
 - 切换到推理模型 `deepseek-reasoner` 时，`Temperature` 参数无效（该模型不支持），属正常现象。
 - API Key 请勿写进代码，统一从环境变量读取；Cloud 部署时在 Secrets 中配置。

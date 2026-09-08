@@ -1,9 +1,10 @@
 """
-简单 RAG（检索增强）模块：文档切分 + BM25 检索。
+简单 RAG 模块：支持两种检索方式。
 
-- 支持 txt / md / pdf（pdf 需安装 pypdf）。
-- 默认使用 jieba 分词（可选）；未安装时退化为中英文字符/单词切分。
-- 检索得到的片段会注入提示词，让 AI 基于文档回答。
+1. SimpleRAG  —— 基于 BM25 的关键词检索（零依赖，默认保底）。
+2. ChromaRAG —— 基于 ChromaDB + Embedding 的语义向量检索（可选，需安装 chromadb）。
+
+两个类接口一致：add_document / build_context / clear / is_empty / doc_count。
 """
 
 import re
@@ -15,9 +16,18 @@ try:
 except Exception:
     _HAS_JIEBA = False
 
+try:
+    import chromadb
+    _HAS_CHROMA = True
+except Exception:
+    _HAS_CHROMA = False
+
+# 供 UI 判断向量检索是否可用
+chroma_available = _HAS_CHROMA
+
 
 def tokenize(text: str):
-    """分词：优先 jieba，否则退化为中英文粗切。"""
+    """分词：优先 jieba，否则退化为中英文字符/单词切分。"""
     text = text.lower()
     if _HAS_JIEBA:
         return [w for w in jieba.lcut(text) if w.strip()]
@@ -44,11 +54,11 @@ def _chunk(text: str, size: int = 300, overlap: int = 60):
 
 
 class SimpleRAG:
-    """轻量内存版知识库，支持添加文档、检索与拼接上下文。"""
+    """BM25 稀疏检索：轻量、零依赖，作为默认保底方案。"""
 
     def __init__(self):
-        self.docs = []          # 每个片段：{"source": 来源, "text": 内容, "chunk_id": 序号}
-        self._tokenized = []    # 每个片段的词表
+        self.docs = []
+        self._tokenized = []
         self.avg_len = 0.0
 
     @property
@@ -60,13 +70,8 @@ class SimpleRAG:
         return len(self.docs)
 
     def add_document(self, name: str, text: str):
-        """把一个文档切分后加入知识库。"""
         for chunk in _chunk(text):
-            self.docs.append({
-                "source": name,
-                "text": chunk,
-                "chunk_id": len(self.docs) + 1,
-            })
+            self.docs.append({"source": name, "text": chunk, "chunk_id": len(self.docs) + 1})
             self._tokenized.append(tokenize(chunk))
         n = len(self._tokenized)
         self.avg_len = (sum(len(x) for x in self._tokenized) / n) if n else 0.0
@@ -77,7 +82,6 @@ class SimpleRAG:
         self.avg_len = 0.0
 
     def retrieve(self, query: str, k: int = 4):
-        """返回与 query 最相关的 k 个片段。"""
         if not self.docs:
             return []
         q = tokenize(query)
@@ -104,7 +108,6 @@ class SimpleRAG:
         return score
 
     def build_context(self, query: str, k: int = 4) -> str:
-        """把检索到的片段拼成可直接注入提示词的文本。"""
         hits = self.retrieve(query, k)
         if not hits:
             return ""
@@ -112,3 +115,81 @@ class SimpleRAG:
         for i, h in enumerate(hits, 1):
             lines.append(f"[资料{i}·来源：{h['source']}] {h['text']}")
         return "\n\n".join(lines)
+
+
+class ChromaRAG:
+    """ChromaDB 向量检索：基于 Embedding 的语义检索，需安装 chromadb。"""
+
+    def __init__(self, collection_name: str = "kb"):
+        if not _HAS_CHROMA:
+            raise RuntimeError("未安装 chromadb，无法使用向量检索")
+        self.client = chromadb.Client()
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+        self._ids = 0
+
+    @property
+    def is_empty(self) -> bool:
+        try:
+            return self.collection.count() == 0
+        except Exception:
+            return True
+
+    @property
+    def doc_count(self) -> int:
+        try:
+            return self.collection.count()
+        except Exception:
+            return 0
+
+    def add_document(self, name: str, text: str):
+        chunks = _chunk(text)
+        if not chunks:
+            return
+        ids, docs, metas = [], [], []
+        for c in chunks:
+            self._ids += 1
+            ids.append(str(self._ids))
+            docs.append(c)
+            metas.append({"source": name})
+        self.collection.add(ids=ids, documents=docs, metadatas=metas)
+
+    def clear(self):
+        try:
+            self.client.delete_collection("kb")
+        except Exception:
+            pass
+        self.collection = self.client.get_or_create_collection(
+            name="kb", metadata={"hnsw:space": "cosine"}
+        )
+        self._ids = 0
+
+    def build_context(self, query: str, k: int = 4) -> str:
+        if self.is_empty:
+            return ""
+        try:
+            n = self.doc_count
+            res = self.collection.query(
+                query_texts=[query], n_results=min(k, n)
+            )
+            docs = (res.get("documents") or [[]])[0]
+            metas = (res.get("metadatas") or [[]])[0]
+            lines = []
+            for i, (doc, meta) in enumerate(zip(docs, metas), 1):
+                src = meta.get("source", "资料") if meta else "资料"
+                lines.append(f"[资料{i}·来源：{src}] {doc}")
+            return "\n\n".join(lines)
+        except Exception:
+            return ""
+
+
+def make_rag(mode: str):
+    """工厂函数：根据检索方式返回对应实例；向量不可用时回退 BM25。"""
+    if mode == "vector" and _HAS_CHROMA:
+        try:
+            return ChromaRAG()
+        except Exception:
+            pass
+    return SimpleRAG()

@@ -6,7 +6,7 @@ from api_config import (
     AVAILABLE_MODELS,
     DEFAULT_SYSTEM_PROMPT,
 )
-from rag import SimpleRAG
+from rag import make_rag, chroma_available
 
 # 页面配置必须放在最顶部
 st.set_page_config(
@@ -18,8 +18,10 @@ st.set_page_config(
 # ---------- 初始化状态 ----------
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "rag_mode" not in st.session_state:
+    st.session_state.rag_mode = "bm25"          # bm25 / vector
 if "rag" not in st.session_state:
-    st.session_state.rag = SimpleRAG()
+    st.session_state.rag = make_rag("bm25")
 if "uploaded_names" not in st.session_state:
     st.session_state.uploaded_names = set()
 
@@ -50,6 +52,19 @@ with st.sidebar:
     max_len = st.slider("回答最大长度 (Max Tokens)", 200, 1500, 600, 100)
     max_rounds = st.slider("记忆对话轮数", 1, 20, 10, 1)
 
+    # ---------- 检索方式 ----------
+    mode_label = st.selectbox("检索方式", ["BM25 关键词", "向量（ChromaDB）"])
+    mode = "vector" if mode_label.startswith("向量") else "bm25"
+    if mode == "vector" and not chroma_available:
+        st.sidebar.warning("未安装 chromadb，已回退到 BM25。可运行 pip install chromadb 启用向量检索。")
+        mode = "bm25"
+    if st.session_state.rag_mode != mode:
+        st.session_state.rag = make_rag(mode)
+        st.session_state.rag_mode = mode
+        if st.session_state.uploaded_names:
+            st.session_state.uploaded_names = set()
+            st.sidebar.info("切换检索方式后，请重新上传知识库文档。")
+
     st.divider()
 
     # ---------- 知识库（RAG） ----------
@@ -66,9 +81,12 @@ with st.sidebar:
                 continue
             content = get_file_text(f.name, f.getvalue())
             if content.strip():
-                st.session_state.rag.add_document(f.name, content)
-                st.session_state.uploaded_names.add(f.name)
-                st.sidebar.success(f"已加载：{f.name}")
+                try:
+                    st.session_state.rag.add_document(f.name, content)
+                    st.session_state.uploaded_names.add(f.name)
+                    st.sidebar.success(f"已加载：{f.name}")
+                except Exception as e:
+                    st.sidebar.error(f"加载失败：{e}")
 
     rag = st.session_state.rag
     st.caption(f"已加载：{len(st.session_state.uploaded_names)} 个文档，共 {rag.doc_count} 个片段")
@@ -98,7 +116,6 @@ user_text = st.chat_input("输入问题和AI对话...")
 
 # ---------- 处理用户输入 ----------
 if user_text:
-    # 保存并显示用户消息
     st.session_state.messages.append({"role": "user", "content": user_text})
     with st.chat_message("user"):
         st.markdown(user_text)
