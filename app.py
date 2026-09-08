@@ -15,6 +15,27 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---------- 访问密码门 ----------
+import os as _os
+
+APP_PASSWORD = _os.environ.get("APP_PASSWORD", "").strip()
+if APP_PASSWORD:
+    if "authed" not in st.session_state:
+        st.session_state.authed = False
+    if not st.session_state.authed:
+        st.title("🔒 访问验证")
+        pwd = st.text_input("请输入访问密码：", type="password")
+        if not pwd:
+            st.info("此应用受密码保护，请输入密码后继续。")
+        elif pwd == APP_PASSWORD:
+            st.session_state.authed = True
+            st.rerun()
+        else:
+            st.error("密码错误，请重试。")
+        st.stop()
+else:
+    st.caption("开发提示：未配置 APP_PASSWORD，当前未启用访问密码。")
+
 # ---------- 初始化状态 ----------
 if "messages" not in st.session_state:
     st.session_state.messages = []
