@@ -1,0 +1,4 @@
+streamlit>=1.30
+openai>=1.0
+jieba>=0.42.1
+pypdf>=4.0
