@@ -8,6 +8,15 @@ from api_config import (
 )
 from rag import make_rag, chroma_available
 
+# 多智能体模式（crewAI）属于可选增强：未安装时不影响原有单模型对话
+try:
+    from agents_crew import run_crew
+    CREW_AVAILABLE = True
+    CREW_IMPORT_ERROR = ""
+except Exception as _crew_import_error:
+    CREW_AVAILABLE = False
+    CREW_IMPORT_ERROR = str(_crew_import_error)
+
 # 页面配置必须放在最顶部
 st.set_page_config(
     page_title="AI对话助手",
@@ -119,6 +128,20 @@ with st.sidebar:
 
     st.divider()
 
+    # ---------- 多智能体模式 ----------
+    use_crew = False
+    if CREW_AVAILABLE:
+        use_crew = st.toggle(
+            "🤖 多智能体模式（crewAI）",
+            value=False,
+            help="开启后由「资料检索员 → 答案撰写员 → 事实核查员」三个 Agent 协作作答，更严谨；代价是不支持流式输出。",
+        )
+        if use_crew:
+            st.caption("多智能体协作：检索 → 撰写 → 核查")
+    else:
+        st.caption("多智能体模式不可用（未安装 crewai）")
+
+    st.divider()
     if st.button("🗑️ 清空对话", type="primary"):
         st.session_state.messages = []
         st.rerun()
@@ -141,9 +164,10 @@ if user_text:
     with st.chat_message("user"):
         st.markdown(user_text)
 
-    # 先检索知识库，把相关片段注入到系统提示词
+    # 普通模式：先检索知识库，把相关片段注入到系统提示词
+    # （多智能体模式下由 Agent 自己调用检索工具，这里不注入）
     custom_system = DEFAULT_SYSTEM_PROMPT
-    if not st.session_state.rag.is_empty:
+    if not use_crew and not st.session_state.rag.is_empty:
         context = st.session_state.rag.build_context(user_text, k=4)
         if context:
             custom_system += (
@@ -154,19 +178,33 @@ if user_text:
             )
 
     with st.chat_message("assistant"):
-        messages = build_messages(
-            history=st.session_state.messages,
-            system_prompt=custom_system,
-            max_history_pairs=max_rounds
-        )
-        full_ans = st.write_stream(
-            stream_ai_reply(
-                messages=messages,
-                model=model,
-                temperature=temp,
-                max_tokens=max_len
+        if use_crew:
+            with st.spinner("🤖 三个 Agent 协作中（检索 → 撰写 → 核查），请稍候..."):
+                try:
+                    full_ans = run_crew(
+                        question=user_text,
+                        rag=st.session_state.rag,
+                        model=model,
+                        temperature=temp,
+                    )
+                except Exception as e:
+                    full_ans = f"❌ 多智能体模式调用失败：{e}"
+            full_ans = render_latex(full_ans)
+            st.markdown(full_ans)
+        else:
+            messages = build_messages(
+                history=st.session_state.messages,
+                system_prompt=custom_system,
+                max_history_pairs=max_rounds
             )
-        )
-        full_ans = render_latex(full_ans)
+            full_ans = st.write_stream(
+                stream_ai_reply(
+                    messages=messages,
+                    model=model,
+                    temperature=temp,
+                    max_tokens=max_len
+                )
+            )
+            full_ans = render_latex(full_ans)
 
     st.session_state.messages.append({"role": "assistant", "content": full_ans})

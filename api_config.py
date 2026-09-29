@@ -9,6 +9,11 @@ if not api_key:
 # 默认接入 DeepSeek，可通过环境变量覆盖以接入其他 OpenAI 兼容服务
 base_url = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com').strip()
 
+# 环境变量里可能混入首尾空白（复制粘贴时很常见）：多余的空格会让 HTTP 请求头
+# 变成非法值，而报错却显示成 "Failed to connect to OpenAI API: Connection error."，
+# 极难排查。这里统一清理并写回 os.environ，好让 crewAI 等模块也读到干净的值。
+os.environ['DEEPSEEK_API_KEY'] = api_key
+os.environ['DEEPSEEK_BASE_URL'] = base_url
 client = OpenAI(api_key=api_key, base_url=base_url)
 
 # 支持的大模型列表：界面显示名 -> 接口模型名

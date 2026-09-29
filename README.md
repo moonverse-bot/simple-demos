@@ -14,6 +14,7 @@
 - 🧷 答案溯源：引用资料时标注「（依据资料1）」来源，降低幻觉
 - 🎛 参数可调：Temperature、Max Tokens、记忆轮数
 - 🔧 工程化：API Key 走环境变量/Secrets、模块化设计
+- 🤝 多智能体协作（crewAI）：开启后由「资料检索员 → 答案撰写员 → 事实核查员」三个 Agent 协作作答
 
 ## 系统架构
 
@@ -72,6 +73,29 @@ streamlit run app.py
 2. 提问时，系统自动检索相关片段并注入提示词
 3. AI 会优先依据文档内容回答，引用时标注「（依据资料1）」来源
 
+## 多智能体模式（crewAI）
+
+侧边栏打开「🤖 多智能体模式（crewAI）」开关后，回答改由三个 Agent 依次协作完成：
+
+| Agent | 职责 |
+|---|---|
+| 资料检索员 | 调用 `search_knowledge_base` 工具，在知识库中检索相关资料片段 |
+| 答案撰写员 | 依据检索结果撰写回答，引用资料处标注（依据资料N） |
+| 事实核查员 | 检查每个论断是否有资料支撑，删除无依据的内容并输出最终答案 |
+
+安装（本机演示使用 clone 下来的 crewAI 源码，与你的改动实时同步）：
+
+```bash
+.venv\Scripts\activate
+pip install -e D:\python-demo-ai-agent\projects\crewAI\lib\crewai
+```
+
+说明：
+
+- 多智能体模式不支持流式输出（三个 Agent 依次跑完才返回），界面上是"等待后一次性显示"。
+- 未安装 crewai 时开关位置会提示不可用，原有的单模型流式对话完全不受影响。
+- 模型与 Temperature 沿用侧边栏设置；`deepseek-reasoner` 不支持 temperature，代码已自动跳过。
+- 相关源码：`agents_crew.py`（Agent / Task / Crew 定义）、`app.py`（开关与分支）。
 ## 部署到 Streamlit Cloud（免费）
 
 1. 把代码提交并推送到 GitHub：
@@ -98,6 +122,7 @@ simple-demos/
 ├── app.py            # Streamlit 界面与交互（入口，含密码门）
 ├── api_config.py     # 模型调用、消息构建、公式渲染
 ├── rag.py            # 文档切分 + 检索（BM25 / ChromaDB 向量）
+├── agents_crew.py    # 多智能体协作（crewAI）：检索 / 撰写 / 核查三个 Agent
 ├── requirements.txt  # 依赖清单
 └── README.md
 ```
