@@ -2,8 +2,7 @@ streamlit>=1.30
 openai>=1.0
 jieba>=0.42.1
 pypdf>=4.0
-# 鍙�夛細鍚敤 ChromaDB 鍚戦噺妫�绱㈡椂瀹夎
-# chromadb>=0.4.24
 
-# 多智能体模式（可选）
-crewai>=1.15
+# optional: chromadb>=0.4.24
+# crewai disabled online: needs Python >=3.10,<3.14 but cloud runs 3.14
+# crewai>=1.15
