@@ -139,7 +139,15 @@ with st.sidebar:
         if use_crew:
             st.caption("多智能体协作：检索 → 撰写 → 核查")
     else:
-        st.caption("多智能体模式不可用（未安装 crewai）")
+        st.caption("多智能体模式不可用")
+        with st.expander("查看原因"):
+            import sys as _sys
+            st.code(
+                f"Python: {_sys.version.split()[0]}\n"
+                f"解释器: {_sys.executable}\n"
+                f"导入错误: {CREW_IMPORT_ERROR or 'crewai 未安装'}",
+                language="text",
+            )
 
     st.divider()
     if st.button("🗑️ 清空对话", type="primary"):
